@@ -5,6 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI-900 Practice Test</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script>
+// ==========================================
+// FIREBASE CONFIGURATION
+// To enable cloud-persisted leaderboard:
+// 1. Go to https://console.firebase.google.com
+// 2. Create a new project (free Spark plan is fine)
+// 3. Go to Build > Realtime Database > Create Database
+// 4. Choose "Start in test mode" (or configure rules)
+// 5. Go to Project Settings > General > Your apps > Add Web App
+// 6. Copy your config values below
+// ==========================================
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  databaseURL: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+let firebaseReady = false;
+let firebaseDB = null;
+
+if (FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL) {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    firebaseDB = firebase.database();
+    firebaseReady = true;
+    console.log('Firebase connected — leaderboard will sync across browsers');
+  } catch (e) {
+    console.warn('Firebase init failed, using localStorage only:', e);
+  }
+} else {
+  console.log('Firebase not configured — leaderboard is localStorage only. See index.html FIREBASE_CONFIG to enable cloud sync.');
+}
+</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--ms-blue:#0078d4;--ms-dark:#1b1b1b;--ms-gray:#2d2d2d;--ms-light:#3a3a3a;--ms-green:#107c10;--ms-red:#d13438;--ms-orange:#ff8c00;--ms-text:#e0e0e0;--ms-white:#ffffff;--ms-bg:#1e1e1e}
@@ -3417,29 +3457,42 @@ function changeUsername() {
 }
 
 // === LEADERBOARD ===
+let cachedLeaderboard = [];
+
 function getLeaderboard() {
   try { return JSON.parse(localStorage.getItem('ai900_leaderboard') || '[]'); }
   catch { return []; }
 }
 
 function saveToLeaderboard(name, score, total, correct, pct) {
-  const board = getLeaderboard();
-  board.push({
+  const entry = {
     name: name,
     score: score,
     correct: correct,
     total: total,
     pct: pct,
     date: new Date().toLocaleDateString()
-  });
+  };
+
+  // Always save to localStorage as cache
+  const board = getLeaderboard();
+  board.push(entry);
   board.sort((a, b) => b.score - a.score);
   const trimmed = board.slice(0, 50);
   localStorage.setItem('ai900_leaderboard', JSON.stringify(trimmed));
+  cachedLeaderboard = trimmed;
   renderLeaderboard();
+
+  // Also push to Firebase if available
+  if (firebaseReady && firebaseDB) {
+    firebaseDB.ref('leaderboard').push(entry)
+      .then(() => console.log('Score saved to cloud'))
+      .catch(e => console.warn('Cloud save failed:', e));
+  }
 }
 
 function renderLeaderboard() {
-  const board = getLeaderboard();
+  const board = cachedLeaderboard.length > 0 ? cachedLeaderboard : getLeaderboard();
   const list = document.getElementById('leaderboardList');
   if (board.length === 0) {
     list.innerHTML = '<li class="no-scores">No scores yet. Complete a<br>Timed Exam to appear here!</li>';
@@ -3453,6 +3506,25 @@ function renderLeaderboard() {
     const li = document.createElement('li');
     li.innerHTML = `<span class="rank">${rank}</span><span class="lb-name">${entry.name}</span><span class="lb-score ${passCls}">${entry.score}</span><span class="lb-date">${entry.date}</span>`;
     list.appendChild(li);
+  });
+}
+
+// Firebase real-time sync — listens for changes and updates leaderboard live
+function initFirebaseLeaderboard() {
+  if (!firebaseReady || !firebaseDB) return;
+
+  firebaseDB.ref('leaderboard').orderByChild('score').on('value', (snapshot) => {
+    const entries = [];
+    snapshot.forEach(child => entries.push(child.val()));
+    entries.sort((a, b) => b.score - a.score);
+    const trimmed = entries.slice(0, 50);
+
+    // Update localStorage cache
+    localStorage.setItem('ai900_leaderboard', JSON.stringify(trimmed));
+    cachedLeaderboard = trimmed;
+    renderLeaderboard();
+  }, (err) => {
+    console.warn('Firebase listener error:', err);
   });
 }
 
@@ -3598,8 +3670,20 @@ if (!localStorage.getItem('ai900_leaderboard')) {
     {name:"Carlos Mendoza",score:550,correct:33,total:60,pct:55,date:"3/26/2026"}
   ];
   localStorage.setItem('ai900_leaderboard', JSON.stringify(seedData));
+
+  // Also seed Firebase if connected and empty
+  if (firebaseReady && firebaseDB) {
+    firebaseDB.ref('leaderboard').once('value', (snapshot) => {
+      if (!snapshot.exists()) {
+        seedData.forEach(entry => firebaseDB.ref('leaderboard').push(entry));
+        console.log('Seed data pushed to Firebase');
+      }
+    });
+  }
 }
+cachedLeaderboard = getLeaderboard();
 initUser();
+initFirebaseLeaderboard();
 renderLeaderboard();
 </script>
 </body>
