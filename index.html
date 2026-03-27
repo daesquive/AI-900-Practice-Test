@@ -3661,17 +3661,6 @@ function downloadPDF() {
 }
 
 // === INITIALIZATION ===
-// Seed leaderboard with initial scores if localStorage is empty (quick first render)
-if (!localStorage.getItem('ai900_leaderboard')) {
-  const seedData = [
-    {name:"Priya Sharma",score:900,correct:54,total:60,pct:90,date:"3/26/2026"},
-    {name:"Aiko Tanaka",score:883,correct:53,total:60,pct:88,date:"3/26/2026"},
-    {name:"Liam O'Connor",score:867,correct:52,total:60,pct:87,date:"3/26/2026"},
-    {name:"Fatima Al-Rashid",score:633,correct:38,total:60,pct:63,date:"3/26/2026"},
-    {name:"Carlos Mendoza",score:550,correct:33,total:60,pct:55,date:"3/26/2026"}
-  ];
-  localStorage.setItem('ai900_leaderboard', JSON.stringify(seedData));
-}
 cachedLeaderboard = getLeaderboard();
 initUser();
 initFirebaseLeaderboard();
