@@ -3514,9 +3514,9 @@ function renderLeaderboard() {
 function initFirebaseLeaderboard() {
   if (!firebaseReady || !firebaseDB) return;
 
-  firebaseDB.ref('leaderboard').orderByChild('score').on('value', (snapshot) => {
+  firebaseDB.ref('leaderboard').on('value', (snapshot) => {
     const entries = [];
-    snapshot.forEach(child => entries.push(child.val()));
+    snapshot.forEach(child => { entries.push(child.val()); });
     entries.sort((a, b) => b.score - a.score);
     const trimmed = entries.slice(0, 50);
 
@@ -3661,7 +3661,7 @@ function downloadPDF() {
 }
 
 // === INITIALIZATION ===
-// Seed leaderboard with initial scores if empty
+// Seed leaderboard with initial scores if localStorage is empty (quick first render)
 if (!localStorage.getItem('ai900_leaderboard')) {
   const seedData = [
     {name:"Priya Sharma",score:900,correct:54,total:60,pct:90,date:"3/26/2026"},
@@ -3671,16 +3671,6 @@ if (!localStorage.getItem('ai900_leaderboard')) {
     {name:"Carlos Mendoza",score:550,correct:33,total:60,pct:55,date:"3/26/2026"}
   ];
   localStorage.setItem('ai900_leaderboard', JSON.stringify(seedData));
-
-  // Also seed Firebase if connected and empty
-  if (firebaseReady && firebaseDB) {
-    firebaseDB.ref('leaderboard').once('value', (snapshot) => {
-      if (!snapshot.exists()) {
-        seedData.forEach(entry => firebaseDB.ref('leaderboard').push(entry));
-        console.log('Seed data pushed to Firebase');
-      }
-    });
-  }
 }
 cachedLeaderboard = getLeaderboard();
 initUser();
